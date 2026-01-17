@@ -10,7 +10,6 @@ def test_enqueue_size_dequeue_flow() -> None:
         call_dequeue().expect("companies_house", 1),
     ])
 
-
 def test_rule_of_3() -> None:
     run_queue([
         call_enqueue("companies_house", 1, iso_ts(delta_minutes=0)).expect(1),
@@ -24,6 +23,14 @@ def test_rule_of_3() -> None:
         call_dequeue().expect("bank_statements", 2),
     ])
 
+def test_timestamp_order() -> None:
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(1),
+        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=0)).expect(1),
+        call_size().expect(2),
+        call_dequeue().expect("bank_statements", 2),
+        call_dequeue().expect("bank_statements", 1),
+    ])
 
 """
 Example #1 - Rule of 3:
@@ -63,3 +70,4 @@ The following operations show that the when a task is enqueued, all its dependen
 
 
 """
+

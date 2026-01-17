@@ -40,7 +40,26 @@ def test_dependency_resolution() -> None:
         call_dequeue().expect("credit_check", 1),
     ])
 
+def test_deduplication() -> None:
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(2),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=5)).expect(3),
+        call_size().expect(2),
+        call_dequeue().expect("bank_statements", 1),
+        call_dequeue().expect("id_verification", 1),
+    ])
+
 """
+The following operations show how deduplication works:
+
+1. Enqueue: user_id=1, provider="bank_statements", timestamp='2025-10-20 12:00:00'  -> 1 (queue size)
+2. Enqueue: user_id=1, provider="bank_statements", timestamp='2025-10-20 12:05:00'  -> 1 (queue size)
+3. Enqueue: user_id=1, provider="id_verification", timestamp='2025-10-20 12:05:00'  -> 2 (queue size)
+4. Dequeue -> {"user_id": 1, "provider": "bank_statements"}
+5. Dequeue -> {"user_id": 1, "provider": "id_verification"}
+
+
 Example #1 - Rule of 3:
 --------
 The following operations show how the Rule of 3 affects queue priority.
@@ -78,4 +97,5 @@ The following operations show that the when a task is enqueued, all its dependen
 
 
 """
+
 

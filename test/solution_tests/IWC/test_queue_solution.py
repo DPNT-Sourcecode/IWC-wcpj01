@@ -32,6 +32,14 @@ def test_timestamp_order() -> None:
         call_dequeue().expect("bank_statements", 1),
     ])
 
+def test_dependency_resolution() -> None:
+    run_queue([
+        call_enqueue("credit_check", 1, iso_ts(delta_minutes=0)).expect(2),
+        call_size().expect(2),
+        call_dequeue().expect("companies_house", 1),
+        call_dequeue().expect("credit_check", 1),
+    ])
+
 """
 Example #1 - Rule of 3:
 --------
@@ -70,3 +78,4 @@ The following operations show that the when a task is enqueued, all its dependen
 
 
 """
+

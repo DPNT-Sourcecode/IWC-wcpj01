@@ -148,11 +148,19 @@ def test_IWC_R5_S6() -> None:
         call_enqueue("id_verification", 2, iso_ts(delta_minutes=6)).expect(3),
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=7)).expect(4),
         call_size().expect(4),
-        call_dequeue().expect("companies_house", 2),  # Rule of 3 first (user 2 has 3 tasks)
-        call_dequeue().expect("id_verification", 2),
         call_dequeue().expect("bank_statements", 1),  # Old bank_statements (7min old)
+        call_dequeue().expect("companies_house", 2),  # Rule of 3 first (user 2 has 3 tasks)
+        call_dequeue().expect("id_verification", 2),        
         call_dequeue().expect("bank_statements", 2),  # Fresh bank_statements last
     ])
+
+"""
+id = IWC_R5_S6_001, req = enqueue({"provider":"bank_statements","timestamp":"2025-10-20 12:00:00","user_id":1}), resp = 1
+id = IWC_R5_S6_002, req = enqueue({"provider":"companies_house","timestamp":"2025-10-20 12:01:00","user_id":2}), resp = 2
+id = IWC_R5_S6_003, req = enqueue({"provider":"id_verification","timestamp":"2025-10-20 12:06:00","user_id":2}), resp = 3
+id = IWC_R5_S6_004, req = enqueue({"provider":"bank_statements","timestamp":"2025-10-20 12:07:00","user_id":2}), resp = 4
+"""
+
 
 """
 id = IWC_R5_S1_000, req = purge(), resp = true

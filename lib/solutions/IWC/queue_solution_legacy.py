@@ -98,7 +98,6 @@ class Queue:
         task_timestamp = self._timestamp_for_task(task)
         oldest, newest = self.oldest_and_newest_timestamps()
         age_seconds = (newest - task_timestamp).total_seconds()
-        print(f"_task_age: task={task.provider}/{task.user_id}, ts={task_timestamp}, oldest={oldest}, newest={newest}, age={age_seconds}")
         return age_seconds
 
     @staticmethod
@@ -161,40 +160,41 @@ class Queue:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
 
+        # Cache oldest and newest timestamps before sorting
+        queue_oldest, queue_newest = self.oldest_and_newest_timestamps()
+
         def sort_key(task: TaskSubmission):
             user_id = task.user_id
             is_bank = self._is_bank_statements(task)
-            task_age = self._task_age(task)
-            is_old_bank = is_bank and task_age >= 300
+            task_timestamp = self._timestamp_for_task(task)
+            task_age = (queue_newest - task_timestamp).total_seconds()
+            is_old_bank = is_bank and task_age > 300
             
-            # Old bank_statements: sort only by timestamp (comes before everything except older tasks)
+            # Old bank_statements: bypass deprioritization, but respect all other rules
             if is_old_bank:
-                key = (0, Priority.NORMAL, datetime.min.replace(tzinfo=None), 0, self._timestamp_for_task(task))
-                print(f"OLD BANK sort_key for {task.provider}/{task.user_id}: {key}")
-                return key
+                rule_of_3 = self._rule_of_3_applies(user_id, task_count)
+                return (
+                    0,  # deprioritise=0 (not deprioritized)
+                    self._priority_for_task(task),
+                    self._earliest_group_timestamp_for_task(task),
+                    rule_of_3,
+                    task_timestamp,
+                )
             
             # Fresh bank_statements or other tasks: use full priority logic
             rule_of_3 = self._rule_of_3_applies(user_id, task_count)
             deprioritise = 1 if is_bank else 0
-            key = (
+            return (
                 deprioritise,
                 self._priority_for_task(task),
                 self._earliest_group_timestamp_for_task(task),
                 rule_of_3,
-                self._timestamp_for_task(task),
+                task_timestamp,
             )
-            print(f"NORMAL sort_key for {task.provider}/{task.user_id} (age={task_age}s): {key}")
-            return key
 
         self._queue.sort(
             key=sort_key
         )
-
-        # Debug: print all tasks and their ages before popping
-        print("--- Queue State Before Dequeue ---")
-        for t in self._queue:
-            print(f"Task: provider={t.provider}, user_id={t.user_id}, timestamp={t.timestamp}, age={self._task_age(t)}s")
-        print("----------------------------------")
 
         task = self._queue.pop(0)
         return TaskDispatch(
@@ -312,3 +312,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+

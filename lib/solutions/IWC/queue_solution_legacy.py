@@ -167,28 +167,41 @@ class Queue:
             task_age = (queue_newest - task_timestamp).total_seconds()
             is_old_bank = is_bank and task_age > 300
             
-            # Old bank_statements get HIGH priority to compete with Rule of 3
-            # But use their own timestamp for group ordering (not group_earliest_timestamp)
+            # Per IWC_R5 spec: Old bank_statements can skip Rule of 3,
+            # but cannot skip tasks with older timestamps
+            # 
+            # Strategy: Put timestamp FIRST for old bank_statements and normal tasks,
+            # then use priority/rule-of-3 for tie-breaking
+            
             if is_old_bank:
-                priority = Priority.HIGH
-                group_timestamp = task_timestamp  # This makes them sort by their own timestamp
-            else:
-                priority = self._priority_for_task(t)
-                group_timestamp = self._earliest_group_timestamp_for_task(t)
+                # Group with normal tasks (deprioritise=0), but sort by timestamp first
+                # This ensures: older normal tasks come before newer old banks
+                # But: older old banks come before newer Rule of 3 tasks
+                return (
+                    0,  # Same tier as normal tasks
+                    task_timestamp,  # Primary sort: timestamp (respects "can't skip older tasks")
+                    Priority.NORMAL,  # Lower than Rule of 3 HIGH, but timestamp already decided
+                    task_timestamp,  # For group_timestamp
+                    False,  # Not Rule of 3
+                    0,  # tie_breaker: old bank wins ties
+                )
             
+            # Fresh bank_statements: deprioritized
+            # Normal tasks: standard ordering with timestamp first
             rule_of_3 = self._rule_of_3_applies(user_id, task_count)
-            deprioritise = 1 if (is_bank and not is_old_bank) else 0
+            deprioritise = 1 if is_bank else 0
             
-            # Tie-breaker: when everything else is equal, old bank_statements come first
-            tie_breaker = 0 if is_old_bank else 1
+            # For normal tasks (deprioritise=0), put timestamp first to work with old banks
+            # For fresh banks (deprioritise=1), still use timestamp for ordering among themselves
+            timestamp_sort = task_timestamp
             
             return (
                 deprioritise,
-                priority,
-                group_timestamp,
+                timestamp_sort,
+                self._priority_for_task(t),
+                self._earliest_group_timestamp_for_task(t),
                 rule_of_3,
-                task_timestamp,
-                tie_breaker,
+                task_timestamp,  # Final tie-breaker
             )
 
         self._queue.sort(
@@ -311,5 +324,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 

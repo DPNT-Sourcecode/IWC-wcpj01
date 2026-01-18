@@ -173,7 +173,6 @@ def test_IWC_R5_S7() -> None:
         call_dequeue().expect("id_verification", 1),  # Rule of 3 user=1 (9min)
     ])
 
-
 def test_IWC_R5_S10() -> None:
     """IWC_R5_S10: Rule of 3 with fresh bank in group - bank comes after other user tasks."""
     run_queue([

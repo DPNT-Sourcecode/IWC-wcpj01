@@ -141,16 +141,16 @@ def test_IWC_R5_S5() -> None:
     ])
 
 def test_IWC_R5_S6() -> None:
-    """IWC_R5_S6: Old bank_statements should come before rule-of-3 tasks."""
+    """IWC_R5_S6: From server test - old bank_statements interaction with rule of 3."""
     run_queue([
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("companies_house", 2, iso_ts(delta_minutes=1)).expect(2),
         call_enqueue("id_verification", 2, iso_ts(delta_minutes=6)).expect(3),
         call_enqueue("bank_statements", 2, iso_ts(delta_minutes=7)).expect(4),
         call_size().expect(4),
-        call_dequeue().expect("bank_statements", 1),  # 7min old - prioritized over rule-of-3
-        call_dequeue().expect("companies_house", 2),  # Rule of 3 applies
+        call_dequeue().expect("companies_house", 2),  # Rule of 3 first (user 2 has 3 tasks)
         call_dequeue().expect("id_verification", 2),
+        call_dequeue().expect("bank_statements", 1),  # Old bank_statements (7min old)
         call_dequeue().expect("bank_statements", 2),  # Fresh bank_statements last
     ])
 

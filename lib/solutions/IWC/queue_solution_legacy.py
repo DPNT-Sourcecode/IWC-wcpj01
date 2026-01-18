@@ -95,9 +95,6 @@ class Queue:
         return task.provider == "bank_statements"
 
     def _bank_statement_age(self, task):
-        if not self._is_bank_statements(task):
-            return False
-        
         task_timestamp = self._timestamp_for_task(task)
         _, newest = self.oldest_and_newest_timestamps()
         age_seconds = (newest - task_timestamp).total_seconds()
@@ -299,4 +296,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 

@@ -45,9 +45,9 @@ def test_deduplication() -> None:
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=5)).expect(1),
         call_enqueue("id_verification", 1, iso_ts(delta_minutes=5)).expect(2),
-        call_size().expect(2),
-        call_dequeue().expect("bank_statements", 1),
+        call_size().expect(2),        
         call_dequeue().expect("id_verification", 1),
+        call_dequeue().expect("bank_statements", 1),
     ])
 
 def test_bank_statements_deprioritization() -> None:
@@ -136,5 +136,6 @@ The following operations show that the when a task is enqueued, all its dependen
 
 
 """
+
 
 

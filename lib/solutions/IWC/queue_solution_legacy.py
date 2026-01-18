@@ -154,8 +154,23 @@ class Queue:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
 
+        def sort_key(task: TaskSubmission):
+            is_bank = 1 if self._is_bank_statements(task) else 0
+            # For Rule of 3, bank_statements should be after other tasks for the same user
+            user_id = task.user_id
+            rule_of_3 = self._rule_of_3_applies(user_id, task_count)
+            # If Rule of 3 applies, bank_statements is deprioritized among user's tasks
+            # Otherwise, bank_statements is deprioritized globally
+            return (
+                self._priority_for_task(task),
+                self._earliest_group_timestamp_for_task(task),
+                rule_of_3,  # False (0) sorts before True (1)
+                is_bank,
+                self._timestamp_for_task(task),
+            )
+
         self._queue.sort(
-            key=self.sort_key
+            key=sort_key
         )
 
         task = self._queue.pop(0)
@@ -163,22 +178,6 @@ class Queue:
             provider=task.provider,
             user_id=task.user_id,
         )
-
-    def sort_key(self, task: TaskSubmission):
-        is_bank = 1 if self._is_bank_statements(task) else 0
-        # For Rule of 3, bank_statements should be after other tasks for the same user
-        user_id = task.user_id
-        rule_of_3 = self._rule_of_3_applies(user_id, task_count)
-        # If Rule of 3 applies, bank_statements is deprioritized among user's tasks
-        # Otherwise, bank_statements is deprioritized globally
-        return (
-            self._priority_for_task(task),
-            self._earliest_group_timestamp_for_task(task),
-            rule_of_3,  # False (0) sorts before True (1)
-            is_bank,
-            self._timestamp_for_task(task),
-        )
-
 
     @property
     def size(self):
@@ -286,5 +285,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 

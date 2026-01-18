@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .utils import call_dequeue, call_enqueue, call_size, iso_ts, run_queue
+from .utils import call_dequeue, call_enqueue, call_size, iso_ts, run_queue, call_age
 
 
 def test_enqueue_size_dequeue_flow() -> None:
@@ -74,7 +74,40 @@ def test_rule_of_3_deprioritization() -> None:
         call_dequeue().expect("bank_statements", 2),
     ])
 
+def test_age_calculation() -> None:
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("id_verification", 2, iso_ts(delta_minutes=5)).expect(2),
+        call_size().expect(2),
+        call_age().expect(300),  # 5 minutes in seconds
+    ])
+
+def test_age_calculation_empty_queue() -> None:
+    run_queue([
+        call_size().expect(0),
+        call_age().expect(0),
+    ])
+
+def test_age_calculation_single_element() -> None:
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_size().expect(1),
+        call_age().expect(0),
+    ])
+
+
 """
+New Requirement:
+----------------
+Implement the "age()" method on the Queue class:
+- should return the time gap, in seconds, between the oldest task in the queue and the newest one (using the timestamps)
+- should return 0 if the queue is empty.
+
+1. Enqueue: user_id=1, provider="id_verification", timestamp='2025-10-20 12:00:00' -> 1 (queue size)
+2. Enqueue: user_id=2, provider="id_verification", timestamp='2025-10-20 12:05:00' -> 2 (queue size)  
+3. Age -> 300 ( 5 minutes )
+
+
 New Requirement:
 ----------------
 Adjust the queueing logic to deprioritize "bank_statements" tasks relative to other providers.

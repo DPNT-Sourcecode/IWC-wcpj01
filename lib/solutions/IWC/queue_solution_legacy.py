@@ -167,10 +167,10 @@ class Queue:
             # Deprioritise bank_statements unless it's old            
             deprioritise = 1 if (self._is_bank_statements(task) and self._task_age(task) < 300) else 0
             return (
+                deprioritise,
                 self._priority_for_task(task),
                 self._earliest_group_timestamp_for_task(task),
-                rule_of_3,  # False (0) sorts before True (1)
-                deprioritise,
+                rule_of_3,  # False (0) sorts before True (1)                
                 self._timestamp_for_task(task),
             )
 
@@ -300,6 +300,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 

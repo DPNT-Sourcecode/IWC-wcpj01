@@ -156,7 +156,7 @@ def test_IWC_R5_S6() -> None:
 
 def test_IWC_R5_S7() -> None:
     """IWC_R5_S7: Rule of 3 with fresh bank_statements in the group.
-    Server expected order shows old bank can skip HIGH priority if it has older timestamp."""
+    Server shows: Rule of 3 overrides bank_statements deprioritization."""
     run_queue([
         call_enqueue("companies_house", 2, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=1)).expect(2),
@@ -165,12 +165,12 @@ def test_IWC_R5_S7() -> None:
         call_enqueue("companies_house", 1, iso_ts(delta_minutes=8)).expect(5),
         call_enqueue("id_verification", 1, iso_ts(delta_minutes=9)).expect(6),
         call_size().expect(6),
-        call_dequeue().expect("companies_house", 2),  # Rule of 3, earliest timestamp (0min)
-        call_dequeue().expect("bank_statements", 1),  # OLD (8min old), timestamp=1min - skips HIGH priority
-        call_dequeue().expect("id_verification", 2),  # Rule of 3 (2min)
-        call_dequeue().expect("bank_statements", 2),  # Rule of 3 (7min)
-        call_dequeue().expect("companies_house", 1),  # Rule of 3 (8min)
-        call_dequeue().expect("id_verification", 1),  # Rule of 3 (9min)
+        call_dequeue().expect("companies_house", 2),  # Rule of 3 user=2, earliest (0min)
+        call_dequeue().expect("bank_statements", 1),  # OLD (8min old), ts=1min - skips HIGH priority
+        call_dequeue().expect("id_verification", 2),  # Rule of 3 user=2 (2min)
+        call_dequeue().expect("bank_statements", 2),  # Rule of 3 user=2 - NOT deprioritized! (7min)
+        call_dequeue().expect("companies_house", 1),  # Rule of 3 user=1 (8min)
+        call_dequeue().expect("id_verification", 1),  # Rule of 3 user=1 (9min)
     ])
 
 

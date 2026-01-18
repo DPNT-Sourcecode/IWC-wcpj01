@@ -96,8 +96,9 @@ class Queue:
 
     def _task_age(self, task):
         task_timestamp = self._timestamp_for_task(task)
-        _, newest = self.oldest_and_newest_timestamps()
+        oldest, newest = self.oldest_and_newest_timestamps()
         age_seconds = (newest - task_timestamp).total_seconds()
+        print(f"_task_age: task={task.provider}/{task.user_id}, ts={task_timestamp}, oldest={oldest}, newest={newest}, age={age_seconds}")
         return age_seconds
 
     @staticmethod
@@ -161,18 +162,29 @@ class Queue:
                 metadata["priority"] = priority_level
 
         def sort_key(task: TaskSubmission):
-            # For Rule of 3, bank_statements should be after other tasks for the same user
             user_id = task.user_id
+            is_bank = self._is_bank_statements(task)
+            task_age = self._task_age(task)
+            is_old_bank = is_bank and task_age >= 300
+            
+            # Old bank_statements: sort only by timestamp (comes before everything except older tasks)
+            if is_old_bank:
+                key = (0, Priority.NORMAL, datetime.min.replace(tzinfo=None), 0, self._timestamp_for_task(task))
+                print(f"OLD BANK sort_key for {task.provider}/{task.user_id}: {key}")
+                return key
+            
+            # Fresh bank_statements or other tasks: use full priority logic
             rule_of_3 = self._rule_of_3_applies(user_id, task_count)
-            # Deprioritise bank_statements unless it's old            
-            deprioritise = 1 if (self._is_bank_statements(task) and self._task_age(task) < 300) else 0
-            return (
+            deprioritise = 1 if is_bank else 0
+            key = (
                 deprioritise,
                 self._priority_for_task(task),
                 self._earliest_group_timestamp_for_task(task),
-                rule_of_3,  # False (0) sorts before True (1)                
+                rule_of_3,
                 self._timestamp_for_task(task),
             )
+            print(f"NORMAL sort_key for {task.provider}/{task.user_id} (age={task_age}s): {key}")
+            return key
 
         self._queue.sort(
             key=sort_key
@@ -300,8 +312,3 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
-
-
-
-
-

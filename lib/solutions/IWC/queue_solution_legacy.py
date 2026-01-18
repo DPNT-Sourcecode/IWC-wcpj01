@@ -94,12 +94,6 @@ class Queue:
     def _is_bank_statements(task):
         return task.provider == "bank_statements"
 
-    def _task_age(self, task):
-        task_timestamp = self._timestamp_for_task(task)
-        _, newest = self.oldest_and_newest_timestamps()
-        age_seconds = (newest - task_timestamp).total_seconds()
-        return age_seconds
-
     @staticmethod
     def _rule_of_3_applies(user_id, task_count):
         return task_count.get(user_id, 0) >= 3
@@ -163,31 +157,20 @@ class Queue:
         # Cache oldest and newest timestamps before sorting
         _, queue_newest = self.oldest_and_newest_timestamps()
 
-        def sort_key(task: TaskSubmission):
-            user_id = task.user_id
-            is_bank = self._is_bank_statements(task)
-            task_timestamp = self._timestamp_for_task(task)
+        def sort_key(t: TaskSubmission):
+            user_id = t.user_id
+            is_bank = self._is_bank_statements(t)
+            task_timestamp = self._timestamp_for_task(t)
             task_age = (queue_newest - task_timestamp).total_seconds()
             is_old_bank = is_bank and task_age > 300
             
-            # Old bank_statements: bypass deprioritization, but respect all other rules
-            if is_old_bank:
-                rule_of_3 = self._rule_of_3_applies(user_id, task_count)
-                return (
-                    0,  # deprioritise=0 (not deprioritized)
-                    self._priority_for_task(task),
-                    self._earliest_group_timestamp_for_task(task),
-                    rule_of_3,
-                    task_timestamp,
-                )
-            
             # Fresh bank_statements or other tasks: use full priority logic
             rule_of_3 = self._rule_of_3_applies(user_id, task_count)
-            deprioritise = 1 if is_bank else 0
+            deprioritise = 1 if is_bank and not is_old_bank else 0
             return (
                 deprioritise,
-                self._priority_for_task(task),
-                self._earliest_group_timestamp_for_task(task),
+                self._priority_for_task(t),
+                self._earliest_group_timestamp_for_task(t),
                 rule_of_3,
                 task_timestamp,
             )
@@ -312,5 +295,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 

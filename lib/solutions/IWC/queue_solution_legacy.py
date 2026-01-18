@@ -163,18 +163,17 @@ class Queue:
             """
             Sort key for task prioritization with time-sensitive bank statements.
             
-            Core challenge: HIGH priority uses group_timestamp for sorting to keep
-            Rule of 3 groups together, but old NORMAL banks need to interleave based
-            on their task_timestamp.
+            Strategy: Sort by task_timestamp primarily to allow old banks to interleave,
+            but use group_timestamp as a secondary sort for HIGH priority grouping.
             
-            Solution: Use a "primary_timestamp" that is:
-            - group_timestamp for HIGH priority tasks
-            - task_timestamp for old NORMAL banks (allowing them to interleave)
-            - task_timestamp for NORMAL non-banks
+            The challenge: OLD NORMAL banks at ts=1 should come AFTER HIGH tasks at ts=0
+            but BEFORE HIGH tasks at ts=2, even though HIGH tasks use group_timestamp=0
+            for grouping.
             
-            This allows old banks at ts=1 to sort between HIGH priority group members
-            at different task timestamps, while still keeping HIGH priority groups
-            together based on their group_timestamp.
+            Solution: Use task_timestamp as the primary discriminator for ALL tasks.
+            For HIGH priority, use group_timestamp as a "pull forward" mechanism in
+            the sub-tier, but still respect the overall task_timestamp ordering for
+            interleaving with old banks.
             """
             is_bank = self._is_bank_statements(t)
             task_timestamp = self._timestamp_for_task(t)
@@ -195,26 +194,30 @@ class Queue:
                     task_timestamp,   # Tiebreaker
                 )
             
-            # Key insight: Within banks, old banks get priority
-            # But fresh banks are still deprioritized within their group
-            priority_tier = priority.value  # HIGH=1, NORMAL=2
+            # For all other tasks, use a unified tier with task_timestamp as primary sort
+            # This allows old banks to properly interleave with HIGH priority groups
             
-            # Bank tier logic:
-            # - Non-banks: tier 0
-            # - Old banks: tier 1  
-            # - Fresh banks: tier 2
-            if not is_bank:
-                bank_tier = 0
-            elif is_old_bank:
-                bank_tier = 1
+            # Determine sort sub-tier based on task type
+            # When timestamps are equal, this determines precedence
+            if is_old_bank and priority == Priority.NORMAL:
+                # Old NORMAL banks: sub-tier 0 (highest at this timestamp)
+                sub_tier = 0
+                group_sort = task_timestamp  # Use task_timestamp for secondary sort
+            elif priority == Priority.HIGH:
+                # HIGH priority tasks: use group_timestamp for grouping
+                # Old banks in HIGH priority are not deprioritized (sub-tier 1 like non-banks)
+                sub_tier = 1 if (not is_bank or is_old_bank) else 2
+                group_sort = group_timestamp  # Use group_timestamp to keep group together
             else:
-                bank_tier = 2
+                # NORMAL priority non-banks: sub-tier 3
+                sub_tier = 3
+                group_sort = task_timestamp
             
             return (
                 0,                # Tier 0: Main processing
-                priority_tier,    # PRIMARY: HIGH (1) before NORMAL (2) [Rule of 3]
-                bank_tier,        # SECONDARY: non-banks (0) < old-banks (1) < fresh-banks (2)
-                task_timestamp,   # TERTIARY: timestamp ordering
+                task_timestamp,   # PRIMARY: Sort by task timestamp for interleaving
+                sub_tier,         # SECONDARY: Priority at this timestamp
+                group_sort,       # TERTIARY: Group HIGH tasks, timestamp for others
             )
 
         self._queue.sort(key=sort_key)
@@ -335,10 +338,3 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
-
-
-
-
-
-
-

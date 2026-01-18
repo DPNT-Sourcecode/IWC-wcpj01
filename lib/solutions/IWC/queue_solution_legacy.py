@@ -176,7 +176,7 @@ class Queue:
                     task_timestamp,  # Timestamp first for old banks
                     MAX_TIMESTAMP,  # group_earliest: not applicable, use MAX
                     1,  # rule_of_3: False (1 > 0, so comes after Rule of 3)
-                    0,  # tie_breaker: old bank wins ties
+                    0,  # tie_breaker: old bank wins ties (comes first)
                 )
 
             # Fresh banks: only deprioritize if NOT in Rule of 3 group
@@ -184,13 +184,15 @@ class Queue:
             deprioritise = 1 if (is_bank and not rule_of_3) else 0
 
             # Standard sorting for non-old-bank tasks
+            # Within same priority/timestamp, banks come after non-banks
             return (
                 deprioritise,
                 self._priority_for_task(t).value,
                 self._earliest_group_timestamp_for_task(t),  # group_earliest
                 MAX_TIMESTAMP,  # placeholder for consistency
                 0 if rule_of_3 else 1,  # Rule of 3 comes first (0 < 1)
-                task_timestamp,  # Final tie-breaker
+                task_timestamp,  # timestamp ordering
+                1 if is_bank else 0,  # banks come after non-banks as tiebreaker
             )
 
         self._queue.sort(key=sort_key)
@@ -311,4 +313,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 

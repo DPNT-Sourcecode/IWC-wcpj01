@@ -163,48 +163,73 @@ class Queue:
             """
             Sort key for task prioritization with time-sensitive bank statements.
             
-            Old bank_statements (age ≥ 5 minutes):
-                - Sort by actual timestamp, can skip HIGH priority tasks
-                - Cannot skip tasks with older timestamps
+            Priority levels (within same timestamp):
+            1. OLD banks (age >= 5min): Can skip HIGH priority tasks
+            2. HIGH priority (Rule of 3): Comes before NORMAL
+            3. NORMAL priority: Regular tasks
+            4. Fresh banks (age < 5min) with NORMAL priority: Deprioritized to end
             
-            Normal tasks:
-                - Deprioritized banks (NORMAL priority) go to end
-                - HIGH priority tasks sort by group timestamp
-                - Within Rule of 3 group, banks come after non-banks (IWC_R3)
+            Within HIGH priority (Rule of 3):
+            - Fresh banks are deprioritized within the group (come after non-banks)
+            - Old banks are NOT deprioritized (sorted by timestamp like non-banks)
             """
             is_bank = self._is_bank_statements(t)
             task_timestamp = self._timestamp_for_task(t)
             task_age = (queue_newest - task_timestamp).total_seconds()
-            is_old_bank = is_bank and task_age > 300
+            is_old_bank = is_bank and task_age >= 300
             priority = self._priority_for_task(t)
             group_timestamp = self._earliest_group_timestamp_for_task(t)
             
-            # Old banks are treated like non-banks for sorting purposes
-            effective_is_bank = 0 if is_old_bank else (1 if is_bank else 0)
-            # Old NORMAL banks get special priority to skip HIGH priority tasks
-            effective_priority = 0.5 if (is_old_bank and priority == Priority.NORMAL) else priority.value
+            # Determine if this bank should be deprioritized
+            is_fresh_bank = is_bank and not is_old_bank
             
-            deprioritise = 1 if (is_bank and priority == Priority.NORMAL and not is_old_bank) else 0
-            
-            # HIGH priority: Banks after non-banks (Rule of 3)
-            # NORMAL priority: sort by task timestamp  
-            # Old NORMAL banks: priority 0.5 to come before HIGH (1) but after nothing (all timestamps matter)
             if priority == Priority.HIGH:
+                # HIGH priority (Rule of 3)
+                # Old banks: sorted by timestamp with non-banks
+                # Fresh banks: deprioritized within the group
+                if is_fresh_bank:
+                    # Fresh bank in Rule of 3: comes after all non-banks in the group
+                    return (
+                        0,  # Not globally deprioritized
+                        priority.value,  # HIGH = 1
+                        group_timestamp,  # Group's earliest timestamp
+                        1,  # Banks after non-banks
+                        task_timestamp,  # Individual task timestamp
+                    )
+                else:
+                    # Non-bank or old bank in Rule of 3: sorted normally by timestamp
+                    return (
+                        0,  # Not globally deprioritized
+                        priority.value,  # HIGH = 1
+                        group_timestamp,  # Group's earliest timestamp
+                        0,  # Non-banks / old banks first
+                        task_timestamp,  # Individual task timestamp
+                    )
+            elif is_fresh_bank:
+                # Fresh NORMAL banks: deprioritized to end of global queue
                 return (
-                    deprioritise,
-                    effective_priority,  # Position 1: old NORMAL banks (0.5) before HIGH (1) before fresh NORMAL (2)
-                    effective_is_bank,  # Position 2: banks after non-banks (old banks treated as non-banks)
-                    task_timestamp,  # Position 3: task timestamp ordering
-                    group_timestamp,  # Position 4: group timestamp as tiebreaker
+                    1,  # Globally deprioritized
+                    task_timestamp,  # Sort by timestamp within deprioritized group
                 )
             else:
-                return (
-                    deprioritise,
-                    effective_priority,  # Position 1: old NORMAL (0.5) before HIGH, fresh NORMAL (2) after HIGH
-                    0 if effective_is_bank == 1 else 1,  # Position 2: banks before non-banks for NORMAL (old banks like non-banks)
-                    task_timestamp,  # Position 3: sort by task timestamp
-                    0 if is_bank else 1,  # Position 4: banks before non-banks as tiebreaker
-                )
+                # NORMAL priority (non-bank or old bank)
+                # Old banks get priority boost over HIGH to allow skipping
+                if is_old_bank:
+                    # Old bank: can skip HIGH priority, sorted by timestamp
+                    return (
+                        0,  # Not deprioritized
+                        0,  # Special priority to come before HIGH (1)
+                        task_timestamp,  # Sort by timestamp
+                        0,  # Old banks before non-banks at same timestamp
+                    )
+                else:
+                    # NORMAL non-bank
+                    return (
+                        0,  # Not deprioritized
+                        priority.value,  # NORMAL = 2 (after HIGH = 1)
+                        task_timestamp,  # Sort by timestamp
+                        1,  # Non-banks after old banks at same timestamp
+                    )
 
         self._queue.sort(key=sort_key)
 
@@ -324,4 +349,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 

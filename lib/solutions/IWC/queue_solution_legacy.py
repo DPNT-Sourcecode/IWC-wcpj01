@@ -167,8 +167,15 @@ class Queue:
             task_age = (queue_newest - task_timestamp).total_seconds()
             is_old_bank = is_bank and task_age > 300
             
-            # Old bank_statements bypass deprioritization (deprioritise=0)
-            # They keep their priority and timestamp ordering
+            # Old bank_statements get HIGH priority to compete with Rule of 3
+            # But use their own timestamp for group ordering (not group_earliest_timestamp)
+            if is_old_bank:
+                priority = Priority.HIGH
+                group_timestamp = task_timestamp  # This makes them sort by their own timestamp
+            else:
+                priority = self._priority_for_task(t)
+                group_timestamp = self._earliest_group_timestamp_for_task(t)
+            
             rule_of_3 = self._rule_of_3_applies(user_id, task_count)
             deprioritise = 1 if (is_bank and not is_old_bank) else 0
             
@@ -177,8 +184,8 @@ class Queue:
             
             return (
                 deprioritise,
-                self._priority_for_task(t),
-                self._earliest_group_timestamp_for_task(t),
+                priority,
+                group_timestamp,
                 rule_of_3,
                 task_timestamp,
                 tie_breaker,
@@ -304,4 +311,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 

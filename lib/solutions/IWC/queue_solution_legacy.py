@@ -189,19 +189,19 @@ class Queue:
             return 0
 
         oldest, newest = self.oldest_and_newest_timestamps()
-        return int((oldest - newest).total_seconds())
+        return int((newest - oldest).total_seconds())
 
     def oldest_and_newest_timestamps(self):
         if self.size == 0:
             return None, None
 
-        oldest = datetime.min.replace(tzinfo=None)
-        newest = MAX_TIMESTAMP
+        oldest = MAX_TIMESTAMP
+        newest = datetime.min.replace(tzinfo=None)
         for task in self._queue:
             task_timestamp = self._timestamp_for_task(task)
-            if task_timestamp < newest:
+            if task_timestamp > newest:
                 newest = task_timestamp
-            if task_timestamp > oldest:
+            if task_timestamp < oldest:
                 oldest = task_timestamp
         return oldest, newest
 
@@ -292,4 +292,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 

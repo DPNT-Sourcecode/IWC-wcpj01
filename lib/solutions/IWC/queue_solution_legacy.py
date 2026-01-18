@@ -176,11 +176,11 @@ class Queue:
             if is_old_bank:
                 # Group with normal tasks (deprioritise=0), but sort by timestamp first
                 # This ensures: older normal tasks come before newer old banks
-                # But: older old banks come before newer Rule of 3 tasks
+                # But: old banks should still respect HIGH priority from Rule of 3
                 return (
                     0,  # Same tier as normal tasks
-                    task_timestamp,  # Primary sort: timestamp (respects "can't skip older tasks")
-                    Priority.NORMAL,  # Lower than Rule of 3 HIGH, but timestamp already decided
+                    self._priority_for_task(t),  # Respect priority (Rule of 3 HIGH beats old bank NORMAL)
+                    task_timestamp,  # Then timestamp ordering
                     task_timestamp,  # For group_timestamp
                     False,  # Not Rule of 3
                     0,  # tie_breaker: old bank wins ties

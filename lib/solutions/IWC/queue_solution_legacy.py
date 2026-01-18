@@ -169,12 +169,9 @@ class Queue:
             """
             Sort key for task prioritization with time-sensitive bank statements.
             
-            PRIMARY: Group timestamp for HIGH priority (Rule of 3), else individual timestamp
-            SECONDARY (within same timestamp/group):
-                - Old banks: Not deprioritized (if NORMAL, can skip HIGH groups)
-                - HIGH priority: Rule of 3
-                - NORMAL priority
-                - Fresh banks: Deprioritized
+            PRIMARY: Priority level (0=old NORMAL banks, 1=HIGH groups, 2=NORMAL)
+            SECONDARY: Group timestamp for HIGH, individual timestamp for others
+            TERTIARY: Individual timestamp and sub-priorities
             
             Within HIGH priority group (Rule of 3):
             - All tasks sorted by individual timestamp
@@ -195,38 +192,51 @@ class Queue:
                 return (
                     1,  # Globally deprioritized
                     task_timestamp,  # Sort by timestamp within deprioritized group
+                    0,
+                    0,
                 )
             
             # HIGH priority (Rule of 3): sort by group timestamp, then individual timestamp
             if priority == Priority.HIGH:
                 if is_fresh_bank:
-                    sub_sort = 1  # Fresh banks after non-banks at same timestamp
+                    # Fresh bank in Rule of 3: deprioritized within the group
+                    # Put after all non-banks by using a large timestamp-like value
+                    return (
+                        0,  # Not globally deprioritized
+                        group_timestamp,  # Group's earliest timestamp
+                        1,  # Banks after non-banks (secondary sort)
+                        task_timestamp,  # Individual task timestamp
+                        0,
+                    )
                 else:
-                    sub_sort = 0  # Non-banks and old banks first
-                
-                return (
-                    0,  # Not deprioritized
-                    group_timestamp,  # Group's earliest timestamp
-                    task_timestamp,  # Individual task timestamp
-                    sub_sort,  # Bank deprioritization within same timestamp
-                )
+                    # Non-bank or old bank in Rule of 3
+                    return (
+                        0,  # Not deprioritized
+                        group_timestamp,  # Group's earliest timestamp
+                        0,  # Non-banks / old banks first (secondary sort)
+                        task_timestamp,  # Individual task timestamp
+                        0,
+                    )
             
             # NORMAL priority
             if is_old_bank:
-                # Old NORMAL banks: priority 0.5, can skip HIGH groups
+                # Old NORMAL banks: can skip HIGH groups with later timestamps
+                # Use own timestamp as "group timestamp" to be sorted by timestamp
                 return (
                     0,  # Not deprioritized
-                    0.5,  # Before HIGH (1) groups
-                    task_timestamp,  # Sort by timestamp
-                    0,  # Old banks before non-banks at same timestamp
+                    task_timestamp,  # Use own timestamp as "group timestamp"
+                    0,  # Priority boost to come before NORMAL non-banks at same timestamp
+                    task_timestamp,  # Individual task timestamp
+                    0,
                 )
             else:
-                # NORMAL non-bank
+                # NORMAL non-bank: sorted by timestamp, comes after HIGH groups and old banks
                 return (
                     0,  # Not deprioritized
-                    2.0,  # NORMAL = 2 (after HIGH = 1)
+                    task_timestamp,  # Use own timestamp as "group timestamp" for sorting
+                    1,  # After old banks and HIGH groups at same timestamp
                     task_timestamp,  # Sort by timestamp
-                    1,  # Non-banks after old banks at same timestamp
+                    1,
                 )
 
         self._queue.sort(key=sort_key)
@@ -347,6 +357,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 

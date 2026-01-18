@@ -181,18 +181,18 @@ class Queue:
             
             # Old banks are treated like non-banks for sorting purposes
             effective_is_bank = 0 if is_old_bank else (1 if is_bank else 0)
-            # Old banks get highest priority tier (0) to skip HIGH priority tasks
-            effective_priority = 0 if is_old_bank else priority.value
+            # Old NORMAL banks get special priority to skip HIGH priority tasks
+            effective_priority = 0.5 if (is_old_bank and priority == Priority.NORMAL) else priority.value
             
             deprioritise = 1 if (is_bank and priority == Priority.NORMAL and not is_old_bank) else 0
             
             # HIGH priority: Banks after non-banks (Rule of 3)
-            # NORMAL priority: sort by task timestamp
-            # Old banks: highest priority tier, sorted by timestamp
-            if priority == Priority.HIGH or is_old_bank:
+            # NORMAL priority: sort by task timestamp  
+            # Old NORMAL banks: priority 0.5 to come before HIGH (1) but after nothing (all timestamps matter)
+            if priority == Priority.HIGH:
                 return (
                     deprioritise,
-                    effective_priority,  # Position 1: old banks (0) before HIGH (1) before NORMAL (2)
+                    effective_priority,  # Position 1: old NORMAL banks (0.5) before HIGH (1) before fresh NORMAL (2)
                     effective_is_bank,  # Position 2: banks after non-banks (old banks treated as non-banks)
                     task_timestamp,  # Position 3: task timestamp ordering
                     group_timestamp,  # Position 4: group timestamp as tiebreaker
@@ -200,7 +200,7 @@ class Queue:
             else:
                 return (
                     deprioritise,
-                    effective_priority,  # Position 1: NORMAL (2) after HIGH (1) and old banks (0)
+                    effective_priority,  # Position 1: old NORMAL (0.5) before HIGH, fresh NORMAL (2) after HIGH
                     0 if effective_is_bank == 1 else 1,  # Position 2: banks before non-banks for NORMAL (old banks like non-banks)
                     task_timestamp,  # Position 3: sort by task timestamp
                     0 if is_bank else 1,  # Position 4: banks before non-banks as tiebreaker
@@ -324,3 +324,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+

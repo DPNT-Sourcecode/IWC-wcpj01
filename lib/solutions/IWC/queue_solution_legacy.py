@@ -163,16 +163,17 @@ class Queue:
             """
             Sort key for task prioritization with time-sensitive bank statements.
             
-            Complex multi-tier sorting:
-            1. Fresh NORMAL banks deprioritized to end
-            2. Old banks (≥5 min): sorted by task_timestamp, can skip HIGH priority
-            3. HIGH priority (Rule of 3): grouped by group_timestamp, banks after non-banks
-            4. NORMAL priority: sorted by task_timestamp
+            Strategy: Sort by task_timestamp primarily to allow old banks to interleave,
+            but use group_timestamp as a secondary sort for HIGH priority grouping.
             
-            The key challenge: Old banks need to interleave with HIGH priority tasks based
-            on task_timestamp comparison. HIGH priority tasks use group_timestamp for their
-            primary sort. Solution: Use a modified comparison where old banks compare their
-            task_timestamp against the range of task_timestamps in HIGH priority groups.
+            The challenge: OLD NORMAL banks at ts=1 should come AFTER HIGH tasks at ts=0
+            but BEFORE HIGH tasks at ts=2, even though HIGH tasks use group_timestamp=0
+            for grouping.
+            
+            Solution: Use task_timestamp as the primary discriminator for ALL tasks.
+            For HIGH priority, use group_timestamp as a "pull forward" mechanism in
+            the sub-tier, but still respect the overall task_timestamp ordering for
+            interleaving with old banks.
             """
             is_bank = self._is_bank_statements(t)
             task_timestamp = self._timestamp_for_task(t)
@@ -180,53 +181,44 @@ class Queue:
             priority = self._priority_for_task(t)
             group_timestamp = self._earliest_group_timestamp_for_task(t)
             
-            # A bank is "old" if its age > 5 minutes
-            # Old banks are exempt from deprioritization
+            # A bank is "old" if its age > 5 minutes (strictly greater than 300 seconds)
             is_old_bank = is_bank and task_age > 300
             
-            # Fresh NORMAL banks: deprioritized to the very end
+            # FRESH NORMAL BANKS (deprioritized)
+            # These go to the very end regardless of timestamp
             if is_bank and priority == Priority.NORMAL and not is_old_bank:
                 return (
-                    999,  # Last tier - deprioritized
-                    task_timestamp,
-                    0,
-                    task_timestamp,
+                    999,              # Tier 999: Deprioritized to end
+                    task_timestamp,   # Sort by timestamp within deprioritized tier
+                    0,                # Sub-tier
+                    task_timestamp,   # Tiebreaker
                 )
             
-            # For all other tasks, we need a sorting strategy that:
-            # - Groups HIGH priority tasks by group_timestamp
-            # - Allows old banks to interleave based on task_timestamp
-            # - Within HIGH groups, puts banks after non-banks
+            # For all other tasks, use a unified tier with task_timestamp as primary sort
+            # This allows old banks to properly interleave with HIGH priority groups
             
-            # Strategy: Use group_timestamp for HIGH, task_timestamp for others
-            # But add old bank exception at tier 0
-            
-            if is_old_bank:
-                # Old bank: Compare by task_timestamp, but can appear before HIGH priority
-                # We sort in a "middle tier" between different HIGH groups
-                return (
-                    0,  # Main processing tier
-                    task_timestamp,  # Sort by when this task was created
-                    0,  # Tier 0: Can appear before HIGH priority tasks
-                    task_timestamp,  # Tiebreaker
-                )
+            # Determine sort sub-tier based on task type
+            # When timestamps are equal, this determines precedence
+            if is_old_bank and priority == Priority.NORMAL:
+                # Old NORMAL banks: sub-tier 0 (highest at this timestamp)
+                sub_tier = 0
+                group_sort = task_timestamp  # Use task_timestamp for secondary sort
             elif priority == Priority.HIGH:
-                # HIGH priority: Group by earliest timestamp, banks after non-banks
-                bank_tier = 2 if is_bank else 1
-                return (
-                    0,  # Main processing tier
-                    group_timestamp,  # Sort by group's earliest timestamp
-                    bank_tier,  # Banks (tier 2) after non-banks (tier 1)
-                    task_timestamp,  # Within group, sort by task timestamp
-                )
+                # HIGH priority tasks: use group_timestamp for grouping
+                # Old banks in HIGH priority are not deprioritized (sub-tier 1 like non-banks)
+                sub_tier = 1 if (not is_bank or is_old_bank) else 2
+                group_sort = group_timestamp  # Use group_timestamp to keep group together
             else:
-                # NORMAL priority non-bank
-                return (
-                    0,  # Main processing tier
-                    task_timestamp,  # Sort by task timestamp
-                    3,  # Tier 3: NORMAL priority
-                    task_timestamp,  # Tiebreaker
-                )
+                # NORMAL priority non-banks: sub-tier 3
+                sub_tier = 3
+                group_sort = task_timestamp
+            
+            return (
+                0,                # Tier 0: Main processing
+                task_timestamp,   # PRIMARY: Sort by task timestamp for interleaving
+                sub_tier,         # SECONDARY: Priority at this timestamp
+                group_sort,       # TERTIARY: Group HIGH tasks, timestamp for others
+            )
 
         self._queue.sort(key=sort_key)
 
@@ -346,6 +338,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 

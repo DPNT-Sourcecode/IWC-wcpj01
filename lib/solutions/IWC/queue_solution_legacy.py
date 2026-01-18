@@ -157,43 +157,40 @@ class Queue:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
 
-        # Cache oldest and newest timestamps before sorting
         _, queue_newest = self.oldest_and_newest_timestamps()
 
         def sort_key(t: TaskSubmission):
-            user_id = t.user_id
+            """
+            Sort key for task prioritization with time-sensitive bank statements.
+            
+            Old bank_statements (age ≥ 5 minutes):
+                - Sort by actual timestamp, can skip HIGH priority tasks
+                - Cannot skip tasks with older timestamps
+            
+            Normal tasks:
+                - Deprioritized banks (NORMAL priority) go to end
+                - HIGH priority tasks sort by group timestamp
+                - Within same priority, banks come after non-banks
+            """
             is_bank = self._is_bank_statements(t)
             task_timestamp = self._timestamp_for_task(t)
             task_age = (queue_newest - task_timestamp).total_seconds()
             is_old_bank = is_bank and task_age > 300
             priority = self._priority_for_task(t)
-            group_timestamp = self._earliest_group_timestamp_for_task(t)
             
-            # Old bank_statements (≥5min): Sort by actual timestamp, can skip HIGH priority
-            # Cannot skip tasks with older actual timestamps (IWC_R5)
             if is_old_bank:
-                return (
-                    0,  # old banks in priority tier (not deprioritized)
-                    task_timestamp,  # Sort by actual timestamp (respects "cannot skip older timestamps")
-                    0,  # old banks come first at same actual timestamp (vs normal HIGH priority)
-                    priority.value,  # tiebreaker: priority
-                )
-
-            # Normal tasks: Follow standard prioritization rules
-            # Banks are deprioritized UNLESS they have HIGH priority (Rule of 3)
-            # Priority is sticky - once HIGH, stays HIGH even if task count drops
+                return (0, task_timestamp, task_timestamp, 0, 0)
+            
             deprioritise = 1 if (is_bank and priority == Priority.NORMAL) else 0
-
-            # For HIGH priority, use group timestamp for primary sort; else use task timestamp
-            primary_timestamp = group_timestamp if priority == Priority.HIGH else task_timestamp
-
+            group_timestamp = self._earliest_group_timestamp_for_task(t)
+            secondary_timestamp = group_timestamp if priority == Priority.HIGH else task_timestamp
+            
             return (
-                deprioritise,  # deprioritized banks pushed to end (0 < 1)
-                primary_timestamp,  # group timestamp for HIGH priority, task timestamp otherwise
-                1,  # normal tasks come after old banks at same timestamp
-                priority.value,  # priority (HIGH=1 < NORMAL=2)
-                task_timestamp,  # tiebreaker: actual timestamp
-                1 if is_bank else 0,  # within same priority, banks after non-banks
+                deprioritise,
+                task_timestamp,
+                secondary_timestamp,
+                priority.value,
+                1 if is_bank else 0,
             )
 
         self._queue.sort(key=sort_key)
@@ -314,5 +311,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 

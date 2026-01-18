@@ -164,9 +164,20 @@ class Queue:
             task_age = (queue_newest - task_timestamp).total_seconds()
             is_old_bank = is_bank and task_age > 300
             
+            # Old bank_statements: prioritize by bypassing deprioritization
+            if is_old_bank:
+                rule_of_3 = self._rule_of_3_applies(user_id, task_count)
+                return (
+                    -1,  # Higher priority than normal tasks (comes before deprioritise=0)
+                    self._priority_for_task(t),
+                    self._earliest_group_timestamp_for_task(t),
+                    rule_of_3,
+                    task_timestamp,
+                )
+            
             # Fresh bank_statements or other tasks: use full priority logic
             rule_of_3 = self._rule_of_3_applies(user_id, task_count)
-            deprioritise = 1 if is_bank and not is_old_bank else 0
+            deprioritise = 1 if is_bank else 0
             return (
                 deprioritise,
                 self._priority_for_task(t),

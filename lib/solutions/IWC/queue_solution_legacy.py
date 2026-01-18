@@ -180,28 +180,29 @@ class Queue:
             group_timestamp = self._earliest_group_timestamp_for_task(t)
             
             if is_old_bank:
-                # Old banks: Sort by task timestamp
-                return (0, task_timestamp, 0, 0, 0)
+                # Old banks: Sort by task timestamp, treated like non-banks
+                # Use HIGH priority value even if they have it from Rule of 3
+                return (0, Priority.HIGH.value, 0, task_timestamp, 0)
             
             deprioritise = 1 if (is_bank and priority == Priority.NORMAL) else 0
             
-            # HIGH priority: Within same timestamp, banks after non-banks (Rule of 3)
+            # HIGH priority: Banks after non-banks (Rule of 3)
             # NORMAL priority: sort by task timestamp
             if priority == Priority.HIGH:
                 return (
                     deprioritise,
-                    task_timestamp,  # Position 1: task timestamp (for old bank compatibility)
-                    1 if is_bank else 0,  # Position 2: banks after non-banks at same timestamp
-                    group_timestamp,  # Position 3: group timestamp as tiebreaker
-                    priority.value,
+                    priority.value,  # Position 1: HIGH (1) before NORMAL (2)
+                    1 if is_bank else 0,  # Position 2: banks after non-banks
+                    task_timestamp,  # Position 3: task timestamp ordering
+                    group_timestamp,  # Position 4: group timestamp as tiebreaker
                 )
             else:
                 return (
                     deprioritise,
-                    task_timestamp,  # Position 1: sort by task timestamp for NORMAL priority
-                    0,  # Position 2: int for type compatibility (not used for NORMAL)
-                    task_timestamp,  # Position 3: repeat timestamp for tiebreaker
-                    priority.value,
+                    priority.value,  # Position 1: NORMAL (2) after HIGH (1)
+                    0,  # Position 2: int for type compatibility
+                    task_timestamp,  # Position 3: sort by task timestamp
+                    task_timestamp,  # Position 4: repeat timestamp for tiebreaker
                 )
 
         self._queue.sort(key=sort_key)
@@ -322,6 +323,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 

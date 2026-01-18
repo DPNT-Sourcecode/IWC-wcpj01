@@ -154,23 +154,8 @@ class Queue:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
 
-        def sort_key(i):
-            is_bank = 1 if self._is_bank_statements(i) else 0
-            # For Rule of 3, bank_statements should be after other tasks for the same user
-            user_id = i.user_id
-            rule_of_3 = self._rule_of_3_applies(user_id, task_count)
-            # If Rule of 3 applies, bank_statements is deprioritized among user's tasks
-            # Otherwise, bank_statements is deprioritized globally
-            return (
-                self._priority_for_task(i),
-                self._earliest_group_timestamp_for_task(i),
-                rule_of_3,  # False (0) sorts before True (1)
-                is_bank,
-                self._timestamp_for_task(i),
-            )
-
         self._queue.sort(
-            key=sort_key
+            key=self.sort_key
         )
 
         task = self._queue.pop(0)
@@ -178,6 +163,22 @@ class Queue:
             provider=task.provider,
             user_id=task.user_id,
         )
+
+    def sort_key(self, task: TaskSubmission):
+        is_bank = 1 if self._is_bank_statements(task) else 0
+        # For Rule of 3, bank_statements should be after other tasks for the same user
+        user_id = task.user_id
+        rule_of_3 = self._rule_of_3_applies(user_id, task_count)
+        # If Rule of 3 applies, bank_statements is deprioritized among user's tasks
+        # Otherwise, bank_statements is deprioritized globally
+        return (
+            self._priority_for_task(task),
+            self._earliest_group_timestamp_for_task(task),
+            rule_of_3,  # False (0) sorts before True (1)
+            is_bank,
+            self._timestamp_for_task(task),
+        )
+
 
     @property
     def size(self):
@@ -188,8 +189,7 @@ class Queue:
         if self.size <= 1:
             return 0
 
-        # iterate through the queue to find oldest and newest timestamps
-        oldest = 0
+        oldest = datetime.min.replace(tzinfo=None)
         newest = MAX_TIMESTAMP
         for task in self._queue:
             task_timestamp = self._timestamp_for_task(task)
@@ -286,4 +286,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 

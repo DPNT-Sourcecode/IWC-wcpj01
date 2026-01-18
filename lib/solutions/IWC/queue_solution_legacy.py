@@ -179,30 +179,31 @@ class Queue:
             priority = self._priority_for_task(t)
             group_timestamp = self._earliest_group_timestamp_for_task(t)
             
-            if is_old_bank:
-                # Old banks: Sort by task timestamp, treated like non-banks
-                # Use HIGH priority value even if they have it from Rule of 3
-                return (0, Priority.HIGH.value, 0, task_timestamp, 0)
+            # Old banks are treated like non-banks for sorting purposes
+            effective_is_bank = 0 if is_old_bank else (1 if is_bank else 0)
+            # Old banks get highest priority tier (0) to skip HIGH priority tasks
+            effective_priority = 0 if is_old_bank else priority.value
             
-            deprioritise = 1 if (is_bank and priority == Priority.NORMAL) else 0
+            deprioritise = 1 if (is_bank and priority == Priority.NORMAL and not is_old_bank) else 0
             
             # HIGH priority: Banks after non-banks (Rule of 3)
             # NORMAL priority: sort by task timestamp
-            if priority == Priority.HIGH:
+            # Old banks: highest priority tier, sorted by timestamp
+            if priority == Priority.HIGH or is_old_bank:
                 return (
                     deprioritise,
-                    priority.value,  # Position 1: HIGH (1) before NORMAL (2)
-                    1 if is_bank else 0,  # Position 2: banks after non-banks
+                    effective_priority,  # Position 1: old banks (0) before HIGH (1) before NORMAL (2)
+                    effective_is_bank,  # Position 2: banks after non-banks (old banks treated as non-banks)
                     task_timestamp,  # Position 3: task timestamp ordering
                     group_timestamp,  # Position 4: group timestamp as tiebreaker
                 )
             else:
                 return (
                     deprioritise,
-                    priority.value,  # Position 1: NORMAL (2) after HIGH (1)
-                    0,  # Position 2: int for type compatibility
+                    effective_priority,  # Position 1: NORMAL (2) after HIGH (1) and old banks (0)
+                    0 if effective_is_bank == 1 else 1,  # Position 2: banks before non-banks for NORMAL (old banks like non-banks)
                     task_timestamp,  # Position 3: sort by task timestamp
-                    task_timestamp,  # Position 4: repeat timestamp for tiebreaker
+                    0 if is_bank else 1,  # Position 4: banks before non-banks as tiebreaker
                 )
 
         self._queue.sort(key=sort_key)
@@ -323,9 +324,3 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
-
-
-
-
-
-

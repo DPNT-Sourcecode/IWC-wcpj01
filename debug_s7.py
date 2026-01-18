@@ -25,4 +25,3 @@ for i in range(1, 7):
     print(f"Step {i+7}: Dequeued {result.provider} user={result.user_id}")
     print(f"  Remaining: {queue.size()}")
     print()
-

@@ -137,6 +137,8 @@ class Queue:
             )
             task_count[user_id] = len(user_tasks)
 
+        _, queue_newest = self.oldest_and_newest_timestamps()
+
         for task in self._queue:
             metadata = task.metadata
             current_earliest = metadata.get("group_earliest_timestamp", MAX_TIMESTAMP)
@@ -146,9 +148,15 @@ class Queue:
             except (TypeError, ValueError):
                 priority_level = None
 
+            # Check if this is an old bank_statements task
+            task_timestamp = self._timestamp_for_task(task)
+            task_age = (queue_newest - task_timestamp).total_seconds()
+            is_old_bank = self._is_bank_statements(task) and task_age >= 300
+
             if priority_level is None or priority_level == Priority.NORMAL:
                 metadata["group_earliest_timestamp"] = MAX_TIMESTAMP
                 if task_count[task.user_id] >= 3:
+                    # Apply Rule of 3 (even to old banks)
                     metadata["group_earliest_timestamp"] = priority_timestamps[task.user_id]
                     metadata["priority"] = Priority.HIGH
                 else:
@@ -157,17 +165,15 @@ class Queue:
                 metadata["group_earliest_timestamp"] = current_earliest
                 metadata["priority"] = priority_level
 
-        _, queue_newest = self.oldest_and_newest_timestamps()
-
         def sort_key(t: TaskSubmission):
             """
             Sort key for task prioritization with time-sensitive bank statements.
             
-            Priority levels (within same timestamp):
-            1. OLD banks (age >= 5min): Can skip HIGH priority tasks
-            2. HIGH priority (Rule of 3): Comes before NORMAL
+            Priority levels:
+            1. HIGH priority (Rule of 3): Comes first
+            2. OLD banks (age >= 5min) with NORMAL priority: Between HIGH and regular NORMAL
             3. NORMAL priority: Regular tasks
-            4. Fresh banks (age < 5min) with NORMAL priority: Deprioritized to end
+            4. Fresh banks with NORMAL priority: Deprioritized to end
             
             Within HIGH priority (Rule of 3):
             - Fresh banks are deprioritized within the group (come after non-banks)
@@ -211,25 +217,23 @@ class Queue:
                     1,  # Globally deprioritized
                     task_timestamp,  # Sort by timestamp within deprioritized group
                 )
+            elif is_old_bank:
+                # Old NORMAL banks: not deprioritized, can skip HIGH priority tasks
+                # Priority 0.5 (before HIGH=1)
+                return (
+                    0,  # Not deprioritized
+                    0.5,  # Before HIGH (1)
+                    task_timestamp,  # Sort by timestamp
+                    0,  # Old banks before non-banks at same timestamp
+                )
             else:
-                # NORMAL priority (non-bank or old bank)
-                # Old banks get priority boost over HIGH to allow skipping
-                if is_old_bank:
-                    # Old bank: can skip HIGH priority, sorted by timestamp
-                    return (
-                        0,  # Not deprioritized
-                        0,  # Special priority to come before HIGH (1)
-                        task_timestamp,  # Sort by timestamp
-                        0,  # Old banks before non-banks at same timestamp
-                    )
-                else:
-                    # NORMAL non-bank
-                    return (
-                        0,  # Not deprioritized
-                        priority.value,  # NORMAL = 2 (after HIGH = 1)
-                        task_timestamp,  # Sort by timestamp
-                        1,  # Non-banks after old banks at same timestamp
-                    )
+                # NORMAL non-bank
+                return (
+                    0,  # Not deprioritized
+                    priority.value,  # NORMAL = 2 (after HIGH = 1 and old banks = 1.5)
+                    task_timestamp,  # Sort by timestamp
+                    1,  # Non-banks after old banks at same timestamp
+                )
 
         self._queue.sort(key=sort_key)
 
@@ -349,5 +353,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 

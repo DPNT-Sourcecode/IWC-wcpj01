@@ -179,32 +179,26 @@ class Queue:
                 # But: old banks should still respect HIGH priority from Rule of 3
                 return (
                     0,  # Same tier as normal tasks
-                    self._priority_for_task(t),  # Respect priority (Rule of 3 HIGH beats old bank NORMAL)
-                    task_timestamp,  # Then timestamp ordering
-                    task_timestamp,  # For group_timestamp
-                    False,  # Not Rule of 3
-                    0,  # tie_breaker: old bank wins ties
-                )
-            
-            # Fresh bank_statements: deprioritized
-            # Normal tasks: standard ordering with timestamp first
-            rule_of_3 = self._rule_of_3_applies(user_id, task_count)
-            deprioritise = 1 if is_bank else 0
-            
-            # For normal tasks (deprioritise=0), put timestamp first to work with old banks
-            # For fresh banks (deprioritise=1), still use timestamp for ordering among themselves
-            timestamp_sort = task_timestamp
-            
-            return (
-                deprioritise,
-                timestamp_sort,
-                self._priority_for_task(t),
-                self._earliest_group_timestamp_for_task(t),
-                rule_of_3,
-                task_timestamp,  # Final tie-breaker
+                self._priority_for_task(t).value,  # Respect priority (Rule of 3 HIGH beats old bank NORMAL)
+                task_timestamp,  # Then timestamp ordering
+                task_timestamp,  # For group_timestamp
+                False,  # Not Rule of 3
+                0,  # tie_breaker: old bank wins ties
             )
 
-        self._queue.sort(
+        # Fresh bank_statements: deprioritized
+        # Normal tasks: standard ordering with timestamp first
+        rule_of_3 = self._rule_of_3_applies(user_id, task_count)
+        deprioritise = 1 if is_bank else 0
+
+        # For normal tasks (deprioritise=0), put timestamp first to work with old banks
+        # For fresh banks (deprioritise=1), still use timestamp for ordering among themselves
+        timestamp_sort = task_timestamp
+
+        return (
+            deprioritise,
+            timestamp_sort,
+            self._priority_for_task(t).value,
             key=sort_key
         )
 
@@ -324,6 +318,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 

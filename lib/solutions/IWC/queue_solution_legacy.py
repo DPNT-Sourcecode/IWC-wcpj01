@@ -94,13 +94,12 @@ class Queue:
     def _is_bank_statements(task):
         return task.provider == "bank_statements"
 
-    @staticmethod
-    def _bank_statement_is_old(task):
-        if not Queue._is_bank_statements(task):
+    def _bank_statement_is_old(self, task):
+        if not self._is_bank_statements(task):
             return False
         
-        task_timestamp = Queue._timestamp_for_task(task)
-        _, newest = Queue.oldest_and_newest_timestamps()
+        task_timestamp = self._timestamp_for_task(task)
+        _, newest = self.oldest_and_newest_timestamps()
         age_seconds = (newest - task_timestamp).total_seconds()
         return age_seconds >= 300  # 5 minutes
 
@@ -165,7 +164,7 @@ class Queue:
                 metadata["priority"] = priority_level
 
         def sort_key(task: TaskSubmission):
-            is_bank = 1 if self._is_bank_statements(task) else 0
+            is_bank = 1 if not self._bank_statement_is_old(task) else 0
             # For Rule of 3, bank_statements should be after other tasks for the same user
             user_id = task.user_id
             rule_of_3 = self._rule_of_3_applies(user_id, task_count)
@@ -302,6 +301,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 

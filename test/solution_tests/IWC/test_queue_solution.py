@@ -50,7 +50,35 @@ def test_deduplication() -> None:
         call_dequeue().expect("id_verification", 1),
     ])
 
+def test_bank_statements_deprioritization() -> None:
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=1)).expect(2),
+        call_enqueue("companies_house", 2, iso_ts(delta_minutes=2)).expect(3),
+        call_size().expect(3),
+        call_dequeue().expect("id_verification", 1),
+        call_dequeue().expect("companies_house", 2),
+        call_dequeue().expect("bank_statements", 1),
+    ])
+
+
+
 """
+New Requirement:
+----------------
+Adjust the queueing logic to deprioritize "bank_statements" tasks relative to other providers.
+- If a customer has fewer than 3 tasks (no Rule of 3), their "bank_statements" task must go
+  to the end of the global queue.
+- If a customer is prioritised under the Rule of 3, their "bank_statements" task must be
+  scheduled after all their other tasks.
+
+1. Enqueue: user_id=1, provider="bank_statements", timestamp='2025-10-20 12:00:00' -> 1 (queue size)
+2. Enqueue: user_id=1, provider="id_verification", timestamp='2025-10-20 12:01:00' -> 2 (queue size)  
+3. Enqueue: user_id=2, provider="companies_house", timestamp='2025-10-20 12:02:00' -> 3 (queue size)  
+4. Dequeue -> {"user_id": 1, "provider": "id_verification"}  
+5. Dequeue -> {"user_id": 2, "provider": "companies_house"}  
+6. Dequeue -> {"user_id": 1, "provider": "bank_statements"}  
+
 The following operations show how deduplication works:
 
 1. Enqueue: user_id=1, provider="bank_statements", timestamp='2025-10-20 12:00:00'  -> 1 (queue size)

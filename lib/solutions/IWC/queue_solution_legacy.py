@@ -178,6 +178,12 @@ class Queue:
             key=sort_key
         )
 
+        # Debug: print all tasks and their ages before popping
+        print("--- Queue State Before Dequeue ---")
+        for t in self._queue:
+            print(f"Task: provider={t.provider}, user_id={t.user_id}, timestamp={t.timestamp}, age={self._task_age(t)}s")
+        print("----------------------------------")
+
         task = self._queue.pop(0)
         return TaskDispatch(
             provider=task.provider,
@@ -294,6 +300,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 

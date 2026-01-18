@@ -168,15 +168,15 @@ class Queue:
             is_old_bank = is_bank and task_age > 300
             rule_of_3 = self._rule_of_3_applies(user_id, task_count)
             
-            # Old bank_statements: timestamp-first sorting to skip HIGH priority if older
+            # Old bank_statements: Can skip Rule of 3, but not older timestamps
             if is_old_bank:
                 return (
                     0,  # deprioritise: same tier as normal tasks
-                    self._priority_for_task(t).value,  # priority
-                    task_timestamp,  # Timestamp first for old banks
-                    MAX_TIMESTAMP,  # group_earliest: not applicable, use MAX
-                    1,  # rule_of_3: False (1 > 0, so comes after Rule of 3)
-                    0,  # tie_breaker: old bank wins ties (comes first)
+                    self._priority_for_task(t).value,  # priority (NORMAL)
+                    task_timestamp,  # Sort by timestamp - can't skip older tasks
+                    0,  # old banks come before Rule of 3 groups at same timestamp
+                    0,  # is_bank tiebreaker 
+                    0,  # is_old_bank tiebreaker (old banks win)
                 )
 
             # Fresh banks: only deprioritize if NOT in Rule of 3 group
@@ -188,11 +188,10 @@ class Queue:
             return (
                 deprioritise,
                 self._priority_for_task(t).value,
-                self._earliest_group_timestamp_for_task(t),  # group_earliest
-                MAX_TIMESTAMP,  # placeholder for consistency
-                0 if rule_of_3 else 1,  # Rule of 3 comes first (0 < 1)
-                task_timestamp,  # timestamp ordering
+                self._earliest_group_timestamp_for_task(t),  # Rule of 3 uses group timestamp
+                0 if rule_of_3 else 1,  # Rule of 3 comes first among non-old-banks
                 1 if is_bank else 0,  # banks come after non-banks as tiebreaker
+                1,  # not an old bank
             )
 
         self._queue.sort(key=sort_key)
@@ -313,5 +312,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 

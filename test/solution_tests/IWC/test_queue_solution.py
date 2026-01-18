@@ -289,4 +289,3 @@ Look at your failed trials and edit your code. When you've finished, deploy your
 Challenge description saved to file: challenges/IWC_R5.txt.
 
 """
-

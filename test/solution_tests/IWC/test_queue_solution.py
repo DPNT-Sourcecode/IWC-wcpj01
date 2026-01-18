@@ -174,42 +174,50 @@ def test_IWC_R5_S7() -> None:
     ])
 
 
+def test_IWC_R5_S10() -> None:
+    """IWC_R5_S10: Rule of 3 with fresh bank in group - bank comes after other user tasks."""
+    run_queue([
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=1)).expect(2),
+        call_enqueue("companies_house", 1, iso_ts(delta_minutes=2)).expect(3),
+        call_enqueue("companies_house", 2, iso_ts(delta_minutes=3)).expect(4),
+        call_size().expect(4),
+        call_dequeue().expect("id_verification", 1),  # Rule of 3: non-bank comes first
+        call_dequeue().expect("companies_house", 1),  # Rule of 3: non-bank comes second
+        call_dequeue().expect("bank_statements", 1),  # Rule of 3: bank comes last in group
+        call_dequeue().expect("companies_house", 2),  # NORMAL priority, different user
+    ])
+
+
 """
 
-## This is what the server test output was for IWC_R5_S7:
-id = IWC_R5_S7_001, req = enqueue({"provider":"companies_house","timestamp":"2025-10-20 12:00:00","user_id":2}), resp = 1
-id = IWC_R5_S7_002, req = enqueue({"provider":"bank_statements","timestamp":"2025-10-20 12:01:00","user_id":1}), resp = 2
-id = IWC_R5_S7_003, req = enqueue({"provider":"id_verification","timestamp":"2025-10-20 12:02:00","user_id":2}), resp = 3
-id = IWC_R5_S7_004, req = enqueue({"provider":"bank_statements","timestamp":"2025-10-20 12:07:00","user_id":2}), resp = 4
-id = IWC_R5_S7_005, req = enqueue({"provider":"companies_house","timestamp":"2025-10-20 12:08:00","user_id":1}), resp = 5
-id = IWC_R5_S7_006, req = enqueue({"provider":"id_verification","timestamp":"2025-10-20 12:09:00","user_id":1}), resp = 6
-id = IWC_R5_S7_007, req = dequeue(), resp = {"provider":"companies_house","user_id":2}
-id = IWC_R5_S7_008, req = dequeue(), resp = {"provider":"bank_statements","user_id":1}
-id = IWC_R5_S7_009, req = dequeue(), resp = {"provider":"id_verification","user_id":2}
-id = IWC_R5_S7_010, req = dequeue(), resp = {"provider":"companies_house","user_id":1}
-id = IWC_R5_S7_011, req = dequeue(), resp = {"provider":"id_verification","user_id":1}
-id = IWC_R5_S7_012, req = dequeue(), resp = {"provider":"bank_statements","user_id":2}
+id = IWC_R5_S10_001, req = enqueue({"provider":"bank_statements","timestamp":"2025-10-20 12:00:00","user_id":1}), resp = 1
+id = IWC_R5_S10_002, req = enqueue({"provider":"id_verification","timestamp":"2025-10-20 12:01:00","user_id":1}), resp = 2
+id = IWC_R5_S10_003, req = enqueue({"provider":"companies_house","timestamp":"2025-10-20 12:02:00","user_id":1}), resp = 3
+id = IWC_R5_S10_004, req = enqueue({"provider":"companies_house","timestamp":"2025-10-20 12:03:00","user_id":2}), resp = 4
+id = IWC_R5_S10_005, req = dequeue(), resp = {"provider":"bank_statements","user_id":1}
+id = IWC_R5_S10_006, req = dequeue(), resp = {"provider":"id_verification","user_id":1}
+id = IWC_R5_S10_007, req = dequeue(), resp = {"provider":"companies_house","user_id":1}
+id = IWC_R5_S10_008, req = dequeue(), resp = {"provider":"companies_house","user_id":2}
 
-
-Result is: FAILED
-Some requests have failed (5/98). Here are some of them:
-
-Test: IWC_R5_S7_010 | Method: dequeue | Params: []
+Test: IWC_R5_S10_005 | Method: dequeue | Params: []
 Assertion: equals
-Expected: {"provider":"bank_statements","user_id":2}
-Actual:   {"provider":"companies_house","user_id":1}
+Expected: {"provider":"id_verification","user_id":1}
+Actual:   {"provider":"bank_statements","user_id":1}
 
 ----------------------------------------
 
-Test: IWC_R5_S7_011 | Method: dequeue | Params: []
+Test: IWC_R5_S10_006 | Method: dequeue | Params: []
 Assertion: equals
 Expected: {"provider":"companies_house","user_id":1}
 Actual:   {"provider":"id_verification","user_id":1}
 
 ----------------------------------------
 
-Test: IWC_R5_S7_012 | Method: dequeue | Params: []
+Test: IWC_R5_S10_007 | Method: dequeue | Params: []
 Assertion: equals
-Expected: {"provider":"id_verification","user_id":1}
-Actual:   {"provider":"bank_statements","user_id":2}
+Expected: {"provider":"bank_statements","user_id":1}
+Actual:   {"provider":"companies_house","user_id":1}
+
+
 """

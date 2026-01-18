@@ -170,7 +170,7 @@ class Queue:
             Normal tasks:
                 - Deprioritized banks (NORMAL priority) go to end
                 - HIGH priority tasks sort by group timestamp
-                - Within same priority, banks come after non-banks
+                - Within Rule of 3 group, banks come after non-banks (IWC_R3)
             """
             is_bank = self._is_bank_statements(t)
             task_timestamp = self._timestamp_for_task(t)
@@ -183,15 +183,25 @@ class Queue:
             
             deprioritise = 1 if (is_bank and priority == Priority.NORMAL) else 0
             group_timestamp = self._earliest_group_timestamp_for_task(t)
-            secondary_timestamp = group_timestamp if priority == Priority.HIGH else task_timestamp
             
-            return (
-                deprioritise,
-                task_timestamp,
-                secondary_timestamp,
-                priority.value,
-                1 if is_bank else 0,
-            )
+            # HIGH priority: sort by group timestamp first (Rule of 3)
+            # NORMAL priority: sort by task timestamp
+            if priority == Priority.HIGH:
+                return (
+                    deprioritise,
+                    group_timestamp,
+                    1 if is_bank else 0,
+                    task_timestamp,
+                    priority.value,
+                )
+            else:
+                return (
+                    deprioritise,
+                    task_timestamp,
+                    group_timestamp,
+                    priority.value,
+                    1 if is_bank else 0,
+                )
 
         self._queue.sort(key=sort_key)
 

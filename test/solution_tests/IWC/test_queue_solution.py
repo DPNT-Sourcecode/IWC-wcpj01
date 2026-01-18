@@ -105,7 +105,47 @@ def test_age_calculation() -> None:
         call_age().expect(300),  # 5 minutes in seconds
     ])
 
+def test_old_bank_statements_priority_rule_of_3() -> None:
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 2, iso_ts(delta_minutes=1)).expect(2),
+        call_enqueue("companies_house", 3, iso_ts(delta_minutes=7)).expect(3),
+        call_size().expect(3),
+        call_dequeue().expect("id_verification", 1),
+        call_dequeue().expect("bank_statements", 2),
+        call_dequeue().expect("companies_house", 3),
+    ])
+
+def test_old_bank_statements_priority() -> None:
+    run_queue([
+        call_enqueue("id_verification", 1, iso_ts(delta_minutes=0)).expect(1),
+        call_enqueue("bank_statements", 1, iso_ts(delta_minutes=1)).expect(2),
+        call_enqueue("companies_house", 2, iso_ts(delta_minutes=7)).expect(3),
+        call_size().expect(3),
+        call_dequeue().expect("id_verification", 1),
+        call_dequeue().expect("bank_statements", 2),
+        call_dequeue().expect("companies_house", 3),
+    ])
+
 """
+New Requirement:
+----------------
+If a "bank_statements" task has an internal age of 5 minutes or more:
+- it is allowed to come earlier in the queue, even before tasks that would normally take priority.
+- still, it should not skip ahead of tasks that have an older timestamp than itself.
+
+If "bank_statements" is not too old, then it behaves as before. (see "Deprioritizing Bank Statements" rule)
+
+Example:
+--------
+1. Enqueue: user_id=1, provider="id_verification", timestamp='2025-10-20 12:00:00' -> 1 (queue size)
+2. Enqueue: user_id=2, provider="bank_statements", timestamp='2025-10-20 12:01:00' -> 2 (queue size)
+3. Enqueue: user_id=3, provider="companies_house", timestamp='2025-10-20 12:07:00' -> 3 (queue size)
+4. Dequeue -> {"user_id": 1, "provider": "id_verification"}
+5. Dequeue -> {"user_id": 2, "provider": "bank_statements"}
+6. Dequeue -> {"user_id": 3, "provider": "companies_house"}
+
+
 New Requirement:
 ----------------
 Implement the "age()" method on the Queue class:

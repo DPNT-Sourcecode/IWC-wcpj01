@@ -177,30 +177,34 @@ class Queue:
             task_age = (queue_newest - task_timestamp).total_seconds()
             is_old_bank = is_bank and task_age > 300
             priority = self._priority_for_task(t)
+            group_timestamp = self._earliest_group_timestamp_for_task(t)
             
             if is_old_bank:
+                # Old banks: Sort by task timestamp but use it at position 2
+                # Position 1 gets a value that compares correctly against both
+                # group_timestamp (for HIGH priority) and task_timestamp (for NORMAL)
+                # Use the task's own timestamp for proper comparison
                 return (0, task_timestamp, task_timestamp, 0, 0)
             
             deprioritise = 1 if (is_bank and priority == Priority.NORMAL) else 0
-            group_timestamp = self._earliest_group_timestamp_for_task(t)
             
             # HIGH priority: sort by group timestamp first (Rule of 3)
             # NORMAL priority: sort by task timestamp
             if priority == Priority.HIGH:
                 return (
                     deprioritise,
-                    group_timestamp,
-                    1 if is_bank else 0,
-                    task_timestamp,
+                    group_timestamp,  # Position 1: group timestamp for Rule of 3 ordering
+                    1 if is_bank else 0,  # Position 2: banks after non-banks in Rule of 3 group
+                    task_timestamp,  # Position 3: actual timestamp as tiebreaker (and for old bank comparison)
                     priority.value,
                 )
             else:
                 return (
                     deprioritise,
                     task_timestamp,
-                    group_timestamp,
+                    task_timestamp,
+                    0,
                     priority.value,
-                    1 if is_bank else 0,
                 )
 
         self._queue.sort(key=sort_key)
@@ -321,6 +325,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 

@@ -175,7 +175,6 @@ class Queue:
                 self._priority_for_task(task),
                 self._earliest_group_timestamp_for_task(task),
                 rule_of_3,  # False (0) sorts before True (1)
-                is_bank,
                 deprioritise,
                 self._timestamp_for_task(task),
             )
@@ -300,3 +299,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+

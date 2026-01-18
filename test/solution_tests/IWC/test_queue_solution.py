@@ -186,37 +186,3 @@ def test_IWC_R5_S10() -> None:
         call_dequeue().expect("bank_statements", 1),  # Rule of 3: bank comes last in group
         call_dequeue().expect("companies_house", 2),  # NORMAL priority, different user
     ])
-
-
-"""
-
-id = IWC_R5_S10_001, req = enqueue({"provider":"bank_statements","timestamp":"2025-10-20 12:00:00","user_id":1}), resp = 1
-id = IWC_R5_S10_002, req = enqueue({"provider":"id_verification","timestamp":"2025-10-20 12:01:00","user_id":1}), resp = 2
-id = IWC_R5_S10_003, req = enqueue({"provider":"companies_house","timestamp":"2025-10-20 12:02:00","user_id":1}), resp = 3
-id = IWC_R5_S10_004, req = enqueue({"provider":"companies_house","timestamp":"2025-10-20 12:03:00","user_id":2}), resp = 4
-id = IWC_R5_S10_005, req = dequeue(), resp = {"provider":"bank_statements","user_id":1}
-id = IWC_R5_S10_006, req = dequeue(), resp = {"provider":"id_verification","user_id":1}
-id = IWC_R5_S10_007, req = dequeue(), resp = {"provider":"companies_house","user_id":1}
-id = IWC_R5_S10_008, req = dequeue(), resp = {"provider":"companies_house","user_id":2}
-
-Test: IWC_R5_S10_005 | Method: dequeue | Params: []
-Assertion: equals
-Expected: {"provider":"id_verification","user_id":1}
-Actual:   {"provider":"bank_statements","user_id":1}
-
-----------------------------------------
-
-Test: IWC_R5_S10_006 | Method: dequeue | Params: []
-Assertion: equals
-Expected: {"provider":"companies_house","user_id":1}
-Actual:   {"provider":"id_verification","user_id":1}
-
-----------------------------------------
-
-Test: IWC_R5_S10_007 | Method: dequeue | Params: []
-Assertion: equals
-Expected: {"provider":"bank_statements","user_id":1}
-Actual:   {"provider":"companies_house","user_id":1}
-
-
-"""

@@ -165,7 +165,7 @@ class Queue:
             
             Old bank_statements (age ≥ 5 minutes):
                 - Sort by actual timestamp, can skip HIGH priority tasks
-                - Cannot skip tasks with older timestamps
+                - Cannot skip tasks with older actual timestamps
             
             Normal tasks:
                 - Deprioritized banks (NORMAL priority) go to end
@@ -177,28 +177,35 @@ class Queue:
             task_age = (queue_newest - task_timestamp).total_seconds()
             is_old_bank = is_bank and task_age > 300
             priority = self._priority_for_task(t)
-            
-            if is_old_bank:
-                return (0, task_timestamp, task_timestamp, 0, 0)
-            
-            deprioritise = 1 if (is_bank and priority == Priority.NORMAL) else 0
             group_timestamp = self._earliest_group_timestamp_for_task(t)
             
-            # HIGH priority: sort by group timestamp first (Rule of 3)
-            # NORMAL priority: sort by task timestamp
+            if is_old_bank:
+                # Old banks: sort in special tier by task_timestamp
+                return (
+                    -1,  # Special tier - comes before normal and deprioritized
+                    task_timestamp,  # Sort by actual timestamp within tier
+                    0,  # Unused
+                    0,  # Unused
+                    0,  # Unused
+                )
+            
+            deprioritise = 1 if (is_bank and priority == Priority.NORMAL) else 0
+            
             if priority == Priority.HIGH:
+                # Rule of 3: group_timestamp takes priority, then is_bank, then task_timestamp
                 return (
                     deprioritise,
-                    group_timestamp,
-                    1 if is_bank else 0,
-                    task_timestamp,
+                    group_timestamp,  # Sort by group timestamp
+                    1 if is_bank else 0,  # Banks after non-banks in group
+                    task_timestamp,  # Tiebreaker
                     priority.value,
                 )
             else:
+                # NORMAL priority tasks
                 return (
                     deprioritise,
                     task_timestamp,
-                    group_timestamp,
+                    task_timestamp,
                     priority.value,
                     1 if is_bank else 0,
                 )
@@ -321,3 +328,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+

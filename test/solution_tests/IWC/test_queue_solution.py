@@ -155,7 +155,8 @@ def test_IWC_R5_S6() -> None:
     ])
 
 def test_IWC_R5_S7() -> None:
-    """IWC_R5_S7: Rule of 3 with fresh bank_statements in the group."""
+    """IWC_R5_S7: Rule of 3 with fresh bank_statements in the group.
+    Server expected order shows old bank can skip HIGH priority if it has older timestamp."""
     run_queue([
         call_enqueue("companies_house", 2, iso_ts(delta_minutes=0)).expect(1),
         call_enqueue("bank_statements", 1, iso_ts(delta_minutes=1)).expect(2),
@@ -164,22 +165,31 @@ def test_IWC_R5_S7() -> None:
         call_enqueue("companies_house", 1, iso_ts(delta_minutes=8)).expect(5),
         call_enqueue("id_verification", 1, iso_ts(delta_minutes=9)).expect(6),
         call_size().expect(6),
-        call_dequeue().expect("companies_house", 2),  # Rule of 3, earliest timestamp
-        call_dequeue().expect("id_verification", 2),  # Rule of 3
-        call_dequeue().expect("bank_statements", 1),  # OLD (8min), timestamp=1min
-        call_dequeue().expect("bank_statements", 2),  # Rule of 3 - fresh bank not deprioritized in R3 group?
-        call_dequeue().expect("companies_house", 1),  # Rule of 3
-        call_dequeue().expect("id_verification", 1),  # Rule of 3
+        call_dequeue().expect("companies_house", 2),  # Rule of 3, earliest timestamp (0min)
+        call_dequeue().expect("bank_statements", 1),  # OLD (8min old), timestamp=1min - skips HIGH priority
+        call_dequeue().expect("id_verification", 2),  # Rule of 3 (2min)
+        call_dequeue().expect("bank_statements", 2),  # Rule of 3 (7min)
+        call_dequeue().expect("companies_house", 1),  # Rule of 3 (8min)
+        call_dequeue().expect("id_verification", 1),  # Rule of 3 (9min)
     ])
 
 
 """
+
+## This is what the server test output was for IWC_R5_S7:
 id = IWC_R5_S7_001, req = enqueue({"provider":"companies_house","timestamp":"2025-10-20 12:00:00","user_id":2}), resp = 1
 id = IWC_R5_S7_002, req = enqueue({"provider":"bank_statements","timestamp":"2025-10-20 12:01:00","user_id":1}), resp = 2
 id = IWC_R5_S7_003, req = enqueue({"provider":"id_verification","timestamp":"2025-10-20 12:02:00","user_id":2}), resp = 3
 id = IWC_R5_S7_004, req = enqueue({"provider":"bank_statements","timestamp":"2025-10-20 12:07:00","user_id":2}), resp = 4
 id = IWC_R5_S7_005, req = enqueue({"provider":"companies_house","timestamp":"2025-10-20 12:08:00","user_id":1}), resp = 5
 id = IWC_R5_S7_006, req = enqueue({"provider":"id_verification","timestamp":"2025-10-20 12:09:00","user_id":1}), resp = 6
+id = IWC_R5_S7_007, req = dequeue(), resp = {"provider":"companies_house","user_id":2}
+id = IWC_R5_S7_008, req = dequeue(), resp = {"provider":"bank_statements","user_id":1}
+id = IWC_R5_S7_009, req = dequeue(), resp = {"provider":"id_verification","user_id":2}
+id = IWC_R5_S7_010, req = dequeue(), resp = {"provider":"companies_house","user_id":1}
+id = IWC_R5_S7_011, req = dequeue(), resp = {"provider":"id_verification","user_id":1}
+id = IWC_R5_S7_012, req = dequeue(), resp = {"provider":"bank_statements","user_id":2}
+
 
 Result is: FAILED
 Some requests have failed (5/98). Here are some of them:

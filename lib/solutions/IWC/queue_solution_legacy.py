@@ -174,14 +174,12 @@ class Queue:
             # then use priority/rule-of-3 for tie-breaking
             
             if is_old_bank:
-                # Group with normal tasks (deprioritise=0), but sort by timestamp first
-                # This ensures: older normal tasks come before newer old banks
-                # But: old banks should still respect HIGH priority from Rule of 3
-                return (
-                    0,  # Same tier as normal tasks
-                self._priority_for_task(t).value,  # Respect priority (Rule of 3 HIGH beats old bank NORMAL)
-                task_timestamp,  # Then timestamp ordering
-                task_timestamp,  # For group_timestamp
+            # Old bank_statements: can skip HIGH priority tasks if they have older timestamp
+            # Sort by timestamp first, then everything else
+            return (
+                0,  # Same tier as normal tasks
+                task_timestamp,  # Timestamp first - old banks with older timestamps come first
+                self._priority_for_task(t).value,  # Then priority
                 False,  # Not Rule of 3
                 0,  # tie_breaker: old bank wins ties
             )
@@ -318,7 +316,3 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
-
-
-
-

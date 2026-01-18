@@ -96,7 +96,7 @@ class Queue:
 
     def _task_age(self, task):
         task_timestamp = self._timestamp_for_task(task)
-        oldest, newest = self.oldest_and_newest_timestamps()
+        _, newest = self.oldest_and_newest_timestamps()
         age_seconds = (newest - task_timestamp).total_seconds()
         return age_seconds
 
@@ -161,7 +161,7 @@ class Queue:
                 metadata["priority"] = priority_level
 
         # Cache oldest and newest timestamps before sorting
-        queue_oldest, queue_newest = self.oldest_and_newest_timestamps()
+        _, queue_newest = self.oldest_and_newest_timestamps()
 
         def sort_key(task: TaskSubmission):
             user_id = task.user_id
@@ -312,4 +312,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 

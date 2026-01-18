@@ -95,6 +95,16 @@ class Queue:
         return task.provider == "bank_statements"
 
     @staticmethod
+    def _bank_statement_is_old(task):
+        if not Queue._is_bank_statements(task):
+            return False
+        
+        task_timestamp = Queue._timestamp_for_task(task)
+        _, newest = Queue.oldest_and_newest_timestamps()
+        age_seconds = (newest - task_timestamp).total_seconds()
+        return age_seconds >= 300  # 5 minutes
+
+    @staticmethod
     def _rule_of_3_applies(user_id, task_count):
         return task_count.get(user_id, 0) >= 3
 
@@ -292,5 +302,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 

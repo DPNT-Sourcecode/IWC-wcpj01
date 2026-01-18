@@ -130,8 +130,11 @@ class Queue:
         priority_timestamps = {}
         for user_id in user_ids:
             user_tasks = [t for t in self._queue if t.user_id == user_id]
-            earliest_timestamp = sorted(user_tasks, key=lambda t: t.timestamp)[0].timestamp
-            priority_timestamps[user_id] = earliest_timestamp
+            earliest_timestamp = sorted(user_tasks, key=lambda t: self._timestamp_for_task(t))[0].timestamp
+            # Convert to datetime for consistent comparison
+            priority_timestamps[user_id] = self._timestamp_for_task(
+                type('obj', (), {'timestamp': earliest_timestamp})()
+            )
             task_count[user_id] = len(user_tasks)
 
         for task in self._queue:
@@ -164,11 +167,12 @@ class Queue:
             task_age = (queue_newest - task_timestamp).total_seconds()
             is_old_bank = is_bank and task_age > 300
             
-            # Old bank_statements bypass deprioritization but respect other ordering
+            # Old bank_statements bypass deprioritization (deprioritise=0)
+            # They keep their priority and timestamp ordering
             rule_of_3 = self._rule_of_3_applies(user_id, task_count)
             deprioritise = 1 if (is_bank and not is_old_bank) else 0
             
-            # Tie-breaker: when timestamps are equal, old bank_statements come first
+            # Tie-breaker: when everything else is equal, old bank_statements come first
             tie_breaker = 0 if is_old_bank else 1
             
             return (
@@ -300,3 +304,4 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+

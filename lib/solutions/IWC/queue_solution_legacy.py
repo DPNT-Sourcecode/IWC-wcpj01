@@ -166,33 +166,34 @@ class Queue:
             task_timestamp = self._timestamp_for_task(t)
             task_age = (queue_newest - task_timestamp).total_seconds()
             is_old_bank = is_bank and task_age > 300
-            rule_of_3 = self._rule_of_3_applies(user_id, task_count)
+            priority = self._priority_for_task(t)
+            group_timestamp = self._earliest_group_timestamp_for_task(t)
             
-            # Old bank_statements (≥5min): Sort purely by timestamp, ignoring Rule of 3
-            # Can skip Rule of 3 HIGH priority, but cannot skip older timestamps
+            # Old bank_statements (≥5min): Sort by actual timestamp, can skip HIGH priority
+            # Cannot skip tasks with older actual timestamps (IWC_R5)
             if is_old_bank:
                 return (
-                    0,  # old banks sort in their own tier (before deprioritized banks)
-                    task_timestamp,  # Sort by timestamp only (bypasses all other rules)
-                    0,  # old banks win ties at same timestamp vs normal tasks
-                    self._priority_for_task(t).value,  # tiebreaker: priority
+                    0,  # old banks in priority tier (not deprioritized)
+                    task_timestamp,  # Sort by actual timestamp (respects "cannot skip older timestamps")
+                    0,  # old banks come first at same actual timestamp (vs normal HIGH priority)
+                    priority.value,  # tiebreaker: priority
                 )
 
             # Normal tasks: Follow standard prioritization rules
-            # Banks are deprioritized UNLESS they're in a Rule of 3 group
-            # (R3: "If a customer is prioritised under the Rule of 3, their bank_statements 
-            #  task must be scheduled after all their other tasks.")
-            deprioritise = 1 if (is_bank and not rule_of_3) else 0
+            # Banks are deprioritized UNLESS they have HIGH priority (Rule of 3)
+            # Priority is sticky - once HIGH, stays HIGH even if task count drops
+            deprioritise = 1 if (is_bank and priority == Priority.NORMAL) else 0
 
-            # For Rule of 3, use group's earliest timestamp; otherwise use task's own timestamp
-            sort_timestamp = self._earliest_group_timestamp_for_task(t) if rule_of_3 else task_timestamp
+            # For HIGH priority, use group timestamp for primary sort; else use task timestamp
+            primary_timestamp = group_timestamp if priority == Priority.HIGH else task_timestamp
 
             return (
-                deprioritise,  # deprioritized banks go to end (0 < 1)
-                sort_timestamp,  # Timestamp or group timestamp (for Rule of 3)
+                deprioritise,  # deprioritized banks pushed to end (0 < 1)
+                primary_timestamp,  # group timestamp for HIGH priority, task timestamp otherwise
                 1,  # normal tasks come after old banks at same timestamp
-                self._priority_for_task(t).value,  # priority (HIGH=1 < NORMAL=2)
-                1 if is_bank else 0,  # within Rule of 3 group, banks after non-banks
+                priority.value,  # priority (HIGH=1 < NORMAL=2)
+                task_timestamp,  # tiebreaker: actual timestamp
+                1 if is_bank else 0,  # within same priority, banks after non-banks
             )
 
         self._queue.sort(key=sort_key)
@@ -313,4 +314,5 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 

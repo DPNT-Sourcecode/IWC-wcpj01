@@ -195,30 +195,34 @@ class Queue:
                     task_timestamp,   # Tiebreaker
                 )
             
-            # For all other tasks, use a hybrid timestamp approach:
-            # - OLD NORMAL banks: treat task_timestamp as their "group_timestamp" for comparison
-            # - HIGH priority: use actual group_timestamp
-            # - NORMAL non-banks: use task_timestamp as "group_timestamp"
-            # This allows old banks to interleave with HIGH groups based on timestamp
+            # Final approach: Use task_timestamp for ALL tasks in position 2 for interleaving,
+            # use group_timestamp in position 3 for HIGH priority grouping,
+            # and carefully chosen sub-tier and tertiary values for correct ordering
+            from datetime import datetime
             if is_old_bank and priority == Priority.NORMAL:
-                # Old NORMAL banks: highest priority, use task_ts as effective group_ts
+                # Old NORMAL banks: use task_timestamp, sub-tier 0, earliest tertiary
+                # When task_timestamps differ, this determines order
+                # When equal, sub-tier 0 beats all others
                 primary_ts = task_timestamp
                 sub_tier = 0
+                secondary_ts = datetime.min.replace(tzinfo=None)  # Earliest possible
             elif priority == Priority.HIGH:
-                # HIGH priority: use group_timestamp for grouping
+                # HIGH priority: task_timestamp primary, group_timestamp pulls group together
                 # Old banks in HIGH priority are NOT deprioritized
-                primary_ts = group_timestamp
+                primary_ts = task_timestamp
                 sub_tier = 1 if (not is_bank or is_old_bank) else 2
+                secondary_ts = group_timestamp
             else:
                 # NORMAL priority non-banks
                 primary_ts = task_timestamp
                 sub_tier = 3
+                secondary_ts = task_timestamp
             
             return (
                 0,                # Tier 0: Main processing
-                sub_tier,         # PRIMARY: Priority tier (old banks = 0, HIGH non-bank = 1, etc.)
-                primary_ts,       # SECONDARY: group_ts for HIGH, task_ts for others
-                task_timestamp,   # TERTIARY: Final ordering by task timestamp
+                primary_ts,       # PRIMARY: task_timestamp for all (enables interleaving)
+                sub_tier,         # SECONDARY: Priority tier at this timestamp
+                secondary_ts,     # TERTIARY: group_timestamp for HIGH, datetime.min for old banks
             )
 
         self._queue.sort(key=sort_key)
@@ -339,6 +343,7 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
 

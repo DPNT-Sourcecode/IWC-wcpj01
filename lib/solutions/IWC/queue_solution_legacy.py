@@ -177,9 +177,12 @@ class Queue:
             is_bank = self._is_bank_statements(t)
             task_timestamp = self._timestamp_for_task(t)
             task_age = (queue_newest - task_timestamp).total_seconds()
-            is_old_bank = is_bank and task_age >= 300
             priority = self._priority_for_task(t)
             group_timestamp = self._earliest_group_timestamp_for_task(t)
+            
+            # A bank is "old" if its age > 5 minutes
+            # Old banks are exempt from deprioritization
+            is_old_bank = is_bank and task_age > 300
             
             # Fresh NORMAL banks: deprioritized to the very end
             if is_bank and priority == Priority.NORMAL and not is_old_bank:
@@ -343,5 +346,6 @@ async def queue_worker():
         logger.info(f"Finished task: {task}")
 ```
 """
+
 
 
